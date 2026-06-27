@@ -1,0 +1,234 @@
+<svg viewBox="0 0 1340 1200" xmlns="http://www.w3.org/2000/svg" font-family="'DM Sans', system-ui, sans-serif">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=DM+Mono:wght@400;500&amp;display=swap');
+      text { font-family:'DM Sans', system-ui, sans-serif; fill:#102A2D; }
+      .h  { font-weight:700; }
+      .t  { font-weight:600; }
+      .b  { font-weight:400; font-size:12px; }
+      .mono { font-family:'DM Mono','JetBrains Mono',monospace; }
+      .lbl { font-weight:600; font-size:12px; fill:#155E63; }
+      .lblr{ font-weight:600; font-size:12px; fill:#971F45; }
+      .wh { fill:#FFFFFF; }
+    </style>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#102A2D" flood-opacity="0.18"/>
+    </filter>
+    <marker id="aP" markerWidth="11" markerHeight="11" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L9,5 L0,10 Z" fill="#155E63"/></marker>
+    <marker id="aR" markerWidth="11" markerHeight="11" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L9,5 L0,10 Z" fill="#C42E5C"/></marker>
+    <marker id="aM" markerWidth="11" markerHeight="11" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L9,5 L0,10 Z" fill="#5C7174"/></marker>
+    <marker id="aPs" markerWidth="11" markerHeight="11" refX="2" refY="5" orient="auto">
+      <path d="M9,0 L0,5 L9,10 Z" fill="#155E63"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1340" height="1200" fill="#FFFFFF"/>
+
+  <!-- TITLE -->
+  <text x="40" y="46" class="h" font-size="26" fill="#0E464A">E-Bilanz · Datenfluss &amp; Komponentenarchitektur</text>
+  <text x="40" y="74" class="b" font-size="14" fill="#5C7174">Vom Anwender über Odoo &amp; eBilanz-App bis zur Übermittlung ans Finanzamt</text>
+
+  <!-- LEGEND -->
+  <g>
+    <rect x="980" y="22" width="320" height="74" fill="#F4F7F7" stroke="#CBD9D9" filter="url(#sh)"/>
+    <rect x="996" y="34" width="20" height="12" fill="#155E63"/>
+    <text x="1024" y="44" class="b">Komponente / Datenfluss</text>
+    <rect x="996" y="54" width="20" height="12" fill="#C42E5C"/>
+    <text x="1024" y="64" class="b">Übermittlung &amp; Rückmeldung</text>
+    <rect x="996" y="74" width="20" height="12" fill="#FFFFFF" stroke="#5C7174" stroke-dasharray="4 3"/>
+    <text x="1024" y="84" class="b">Separater / Update-Kanal</text>
+  </g>
+
+  <!-- ============ USER ============ -->
+  <g filter="url(#sh)">
+    <rect x="380" y="120" width="360" height="86" fill="#FFFFFF" stroke="#155E63" stroke-width="1.5"/>
+    <rect x="380" y="120" width="360" height="30" fill="#155E63"/>
+    <text x="560" y="141" class="h wh" font-size="14" text-anchor="middle">Anwender · Buchhaltung</text>
+    <text x="560" y="172" class="b" text-anchor="middle">Sachbearbeiter · Bilanzbuchhalter</text>
+    <text x="560" y="190" class="b" text-anchor="middle">Steuerberater (Freigabe &amp; Versand)</text>
+  </g>
+  <!-- User -> App -->
+  <line x1="560" y1="206" x2="560" y2="250" stroke="#155E63" stroke-width="2" marker-end="url(#aP)"/>
+  <text x="572" y="232" class="lbl">bedient (Browser)</text>
+
+  <!-- ============ eBILANZ APP CONTAINER ============ -->
+  <g filter="url(#sh)">
+    <rect x="290" y="252" width="540" height="356" fill="#E2EEEF" stroke="#155E63" stroke-width="1.5"/>
+    <rect x="290" y="252" width="540" height="34" fill="#155E63"/>
+    <text x="304" y="274" class="h wh" font-size="14">eBilanz-App</text>
+    <text x="816" y="274" class="b wh mono" font-size="12" text-anchor="end">ebilanz.simplify-erp.de</text>
+  </g>
+  <!-- Vue UI -->
+  <g filter="url(#sh)">
+    <rect x="306" y="298" width="508" height="58" fill="#FFFFFF" stroke="#155E63"/>
+    <text x="318" y="318" class="t" font-size="12.5">Vue 3 SPA – Oberflächen</text>
+    <text x="318" y="338" class="b">Stammdaten · Import · Mapping · Erfassung · Validierung · Übermittlung · Protokoll</text>
+  </g>
+  <!-- Backend API -->
+  <g filter="url(#sh)">
+    <rect x="306" y="366" width="508" height="48" fill="#FFFFFF" stroke="#155E63"/>
+    <text x="560" y="395" class="t" font-size="12.5" text-anchor="middle">Backend-API – Orchestrierung · Auth · RPC-Client</text>
+  </g>
+  <!-- Engines row -->
+  <g filter="url(#sh)">
+    <rect x="306" y="430" width="160" height="160" fill="#FFFFFF" stroke="#155E63"/>
+    <rect x="306" y="430" width="160" height="26" fill="#6FAAAF"/>
+    <text x="386" y="448" class="t" font-size="12" text-anchor="middle" fill="#0E464A">SQLite (pro Kunde)</text>
+    <text x="316" y="478" class="b">Stammdaten · Mapping</text>
+    <text x="316" y="496" class="b">Werte · Protokoll</text>
+    <text x="316" y="514" class="b">(versioniert je</text>
+    <text x="316" y="532" class="b">Taxonomie)</text>
+  </g>
+  <g filter="url(#sh)">
+    <rect x="480" y="430" width="160" height="160" fill="#FFFFFF" stroke="#155E63"/>
+    <rect x="480" y="430" width="160" height="26" fill="#6FAAAF"/>
+    <text x="560" y="448" class="t" font-size="12" text-anchor="middle" fill="#0E464A">Mapping-Engine</text>
+    <text x="490" y="478" class="b">Konto →</text>
+    <text x="490" y="496" class="b">Taxonomie-Position</text>
+    <text x="490" y="514" class="b">Mussfeld / Summe /</text>
+    <text x="490" y="532" class="b">Auffangposition</text>
+  </g>
+  <g filter="url(#sh)">
+    <rect x="654" y="430" width="160" height="160" fill="#FFFFFF" stroke="#155E63"/>
+    <rect x="654" y="430" width="160" height="26" fill="#6FAAAF"/>
+    <text x="734" y="448" class="t" font-size="12" text-anchor="middle" fill="#0E464A">XBRL-Generator</text>
+    <text x="664" y="478" class="b">GCD + GAAP</text>
+    <text x="664" y="496" class="b">Instanzdokument</text>
+    <text x="664" y="514" class="b">(gegen Taxonomie-</text>
+    <text x="664" y="532" class="b">Schema)</text>
+  </g>
+
+  <!-- ============ ODOO ============ -->
+  <g filter="url(#sh)">
+    <rect x="880" y="252" width="420" height="288" fill="#FFFFFF" stroke="#155E63" stroke-width="1.5"/>
+    <rect x="880" y="252" width="420" height="34" fill="#155E63"/>
+    <text x="894" y="274" class="h wh" font-size="14">Odoo · Single-Instance je Kunde</text>
+  </g>
+  <g font-size="12">
+    <rect x="894" y="296" width="392" height="34" fill="#F4F7F7" stroke="#CBD9D9"/>
+    <text x="904" y="318" class="b"><tspan class="mono" font-size="11.5">res.company</tspan> + x_ebilanz (Steuernr., Finanzamt, Rechtsform)</text>
+    <rect x="894" y="334" width="392" height="32" fill="#F4F7F7" stroke="#CBD9D9"/>
+    <text x="904" y="355" class="b"><tspan class="mono" font-size="11.5">account.account</tspan> – Konten (SKR03/04)</text>
+    <rect x="894" y="370" width="392" height="32" fill="#F4F7F7" stroke="#CBD9D9"/>
+    <text x="904" y="391" class="b"><tspan class="mono" font-size="11.5">account.move.line</tspan> – Salden / SuSa (posted)</text>
+    <rect x="894" y="406" width="392" height="32" fill="#F4F7F7" stroke="#CBD9D9"/>
+    <text x="904" y="427" class="b"><tspan class="mono" font-size="11.5">account.asset</tspan> – Anlagenspiegel (Enterprise)</text>
+    <rect x="894" y="442" width="392" height="32" fill="#F4F7F7" stroke="#CBD9D9"/>
+    <text x="904" y="463" class="b">RPC-Schnittstelle – JSON-RPC / XML-RPC</text>
+    <rect x="894" y="478" width="392" height="50" fill="#F7E1E9" stroke="#C42E5C"/>
+    <text x="904" y="498" class="b"><tspan class="mono" font-size="11.5">x_ebilanz_submission</tspan></text>
+    <text x="904" y="516" class="b">Write-back: Status · Transfer-Ticket · PDF-Ref</text>
+  </g>
+  <!-- Odoo <-> Backend (bidirectional) -->
+  <line x1="814" y1="390" x2="880" y2="390" stroke="#155E63" stroke-width="2" marker-end="url(#aP)" marker-start="url(#aPs)"/>
+  <rect x="817" y="360" width="60" height="22" fill="#FFFFFF" stroke="#155E63"/>
+  <text x="847" y="375" class="lbl" font-size="11" text-anchor="middle">RPC ⇄</text>
+
+  <!-- ============ TAXONOMY ============ -->
+  <g filter="url(#sh)">
+    <rect x="880" y="560" width="420" height="92" fill="#FFFFFF" stroke="#155E63" stroke-width="1.5"/>
+    <rect x="880" y="560" width="420" height="28" fill="#6FAAAF"/>
+    <text x="894" y="580" class="t" font-size="13" fill="#0E464A">HGB-Taxonomie-Pakete (lokal importiert)</text>
+    <text x="894" y="612" class="b">Kerntaxonomie 6.9 / 6.10</text>
+    <text x="894" y="632" class="b">+ Ergänzungstaxonomie JAbschlVUV (Verkehr)</text>
+  </g>
+  <!-- Taxonomy -> XBRL Gen -->
+  <path d="M880,600 L840,600 L840,510 L814,510" fill="none" stroke="#155E63" stroke-width="2" marker-end="url(#aP)"/>
+  <text x="734" y="615" class="lbl" font-size="11" text-anchor="middle">Schema + Linkbases</text>
+
+  <!-- App -> ERiC -->
+  <line x1="560" y1="608" x2="560" y2="662" stroke="#155E63" stroke-width="2.5" marker-end="url(#aP)"/>
+  <text x="572" y="640" class="lbl">validieren · übermitteln</text>
+
+  <!-- ============ ERiC SIDECAR ============ -->
+  <g filter="url(#sh)">
+    <rect x="290" y="664" width="540" height="160" fill="#E2EEEF" stroke="#155E63" stroke-width="1.5"/>
+    <rect x="290" y="664" width="540" height="34" fill="#0E464A"/>
+    <text x="304" y="686" class="h wh" font-size="14">ERiC-Sidecar · C-Bibliothek (serverseitig)</text>
+    <text x="816" y="686" class="b wh" font-size="11.5" text-anchor="end">Hersteller-ID</text>
+  </g>
+  <g filter="url(#sh)">
+    <rect x="306" y="710" width="160" height="100" fill="#FFFFFF" stroke="#155E63"/>
+    <text x="386" y="744" class="t" font-size="12" text-anchor="middle">Plausibilitäts- &amp;</text>
+    <text x="386" y="762" class="t" font-size="12" text-anchor="middle">Mussfeldprüfung</text>
+    <text x="386" y="786" class="b" text-anchor="middle">(ERiC-Validierung)</text>
+  </g>
+  <g filter="url(#sh)">
+    <rect x="480" y="710" width="160" height="100" fill="#FFFFFF" stroke="#155E63"/>
+    <text x="560" y="744" class="t" font-size="12" text-anchor="middle">Zertifikat + PIN</text>
+    <text x="560" y="768" class="b" text-anchor="middle">ELSTER-Zertifikat</text>
+    <text x="560" y="786" class="b" text-anchor="middle">(verschlüsselt / Vault)</text>
+  </g>
+  <g filter="url(#sh)">
+    <rect x="654" y="710" width="160" height="100" fill="#F7E1E9" stroke="#C42E5C" stroke-width="1.5"/>
+    <text x="734" y="740" class="t" font-size="12" text-anchor="middle" fill="#971F45">Verschlüsselung</text>
+    <text x="734" y="758" class="t" font-size="12" text-anchor="middle" fill="#971F45">+ Versand</text>
+    <text x="734" y="784" class="b mono" font-size="10.5" text-anchor="middle" fill="#971F45">EricBearbeiteVorgang()</text>
+  </g>
+
+  <!-- ERiC -> ELSTER -->
+  <line x1="560" y1="824" x2="560" y2="878" stroke="#C42E5C" stroke-width="2.5" marker-end="url(#aR)"/>
+  <text x="572" y="856" class="lblr">verschlüsselt (TLS)</text>
+
+  <!-- ============ ELSTER / FINANZAMT ============ -->
+  <g filter="url(#sh)">
+    <rect x="290" y="880" width="540" height="150" fill="#F7E1E9" stroke="#C42E5C" stroke-width="1.5"/>
+    <rect x="290" y="880" width="540" height="34" fill="#C42E5C"/>
+    <text x="304" y="902" class="h wh" font-size="14">ELSTER · Finanzverwaltung</text>
+  </g>
+  <g filter="url(#sh)">
+    <rect x="306" y="926" width="250" height="90" fill="#FFFFFF" stroke="#C42E5C"/>
+    <text x="431" y="960" class="t" font-size="12.5" text-anchor="middle">ELSTER Annahmeserver</text>
+    <text x="431" y="980" class="b" text-anchor="middle">/ Clearingstelle</text>
+    <text x="431" y="1000" class="b" text-anchor="middle">Annahme · Quittung</text>
+  </g>
+  <line x1="556" y1="971" x2="598" y2="971" stroke="#C42E5C" stroke-width="2.5" marker-end="url(#aR)"/>
+  <g filter="url(#sh)">
+    <rect x="600" y="926" width="214" height="90" fill="#C42E5C" stroke="#971F45"/>
+    <text x="707" y="962" class="h wh" font-size="16" text-anchor="middle">★ Finanzamt</text>
+    <text x="707" y="986" class="b wh" text-anchor="middle">Landesfinanzverwaltung</text>
+    <text x="707" y="1004" class="b wh" text-anchor="middle">Zielsystem der Bilanz</text>
+  </g>
+
+  <!-- RETURN PATH -->
+  <path d="M290,955 L228,955 L228,470 L306,470" fill="none" stroke="#C42E5C" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#aR)"/>
+  <g filter="url(#sh)">
+    <rect x="24" y="560" width="196" height="116" fill="#FFFFFF" stroke="#C42E5C"/>
+    <rect x="24" y="560" width="196" height="26" fill="#C42E5C"/>
+    <text x="34" y="578" class="t wh" font-size="12">Rückmeldung</text>
+    <text x="34" y="606" class="b" font-size="11.5">Statusprotokoll +</text>
+    <text x="34" y="624" class="b" font-size="11.5">Transfer-Ticket + PDF</text>
+    <text x="34" y="648" class="b" font-size="11.5">→ SQLite-Protokoll</text>
+    <text x="34" y="666" class="b" font-size="11.5">→ Write-back nach Odoo</text>
+  </g>
+
+  <!-- BUNDESANZEIGER (separate) -->
+  <g filter="url(#sh)">
+    <rect x="880" y="700" width="360" height="96" fill="#FFFFFF" stroke="#5C7174" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="894" y="726" class="t" font-size="13" fill="#5C7174">Bundesanzeiger – Offenlegung</text>
+    <text x="894" y="748" class="b" fill="#5C7174">§ 325 HGB · größenabhängig (§ 267)</text>
+    <text x="894" y="772" class="t" font-size="12" fill="#971F45">SEPARATER Kanal – NICHT über ELSTER</text>
+  </g>
+  <path d="M814,560 L850,560 L850,748 L880,748" fill="none" stroke="#5C7174" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#aM)"/>
+  <text x="864" y="552" class="b" font-size="11" fill="#5C7174" text-anchor="middle">separate Pflicht</text>
+
+  <!-- ============ UPDATE SOURCES ============ -->
+  <text x="40" y="1078" class="h" font-size="15" fill="#0E464A">Pflege- / Update-Quellen <tspan class="b" font-size="12" fill="#5C7174">(offline eingespielt)</tspan></text>
+  <g filter="url(#sh)">
+    <rect x="300" y="1092" width="460" height="80" fill="#FFFFFF" stroke="#5C7174" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="314" y="1118" class="t" font-size="13" fill="#5C7174">ELSTER Entwicklerbereich → ERiC-Releases</text>
+    <text x="314" y="1142" class="b" fill="#5C7174">Nov: Testfälle (Testmerker) · Mai: Echtfälle · + Patches</text>
+    <text x="314" y="1160" class="b mono" font-size="11" fill="#5C7174">elster.de/elsterweb/entwickler</text>
+  </g>
+  <g filter="url(#sh)">
+    <rect x="860" y="1092" width="440" height="80" fill="#FFFFFF" stroke="#5C7174" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="874" y="1118" class="t" font-size="13" fill="#5C7174">esteuer.de → Taxonomie-Pakete</text>
+    <text x="874" y="1142" class="b" fill="#5C7174">jährlich · Q2 · BMF-Schreiben (z. B. 6.10 am 08.06.2026)</text>
+    <text x="874" y="1160" class="b mono" font-size="11" fill="#5C7174">www.esteuer.de</text>
+  </g>
+  <!-- update arrows -->
+  <path d="M300,1120 L268,1120 L268,742 L290,742" fill="none" stroke="#5C7174" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#aM)"/>
+  <path d="M1280,1092 L1280,606 L1300,606" fill="none" stroke="#5C7174" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#aM)"/>
+</svg>

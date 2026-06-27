@@ -1,0 +1,42 @@
+# --- Secrets / Konfiguration (CLAUDE.md: niemals einchecken) ---
+.env
+**/.env
+*.env
+!*.env.example
+init_*.sql
+
+# --- Lokale Tooling-/Editor-Konfiguration ---
+.claude/
+.vscode/
+.idea/
+.DS_Store
+
+# --- Python (Backend) ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+backend/.venv/
+tests/venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Node / Frontend ---
+node_modules/
+web-UI/dist/
+dist/
+.vite/
+**/.vite/
+*.local
+
+# --- Datenbank + Backups (data/[pg|sqlite]_backups/) ---
+data/
+*.sqlite
+*.sqlite3
+
+# --- Logs / Temp ---
+*.log
+*.tmp
