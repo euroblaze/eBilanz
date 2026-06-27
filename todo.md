@@ -178,3 +178,11 @@ Docker, Tests. Aktionen, die nur Du erledigen kannst, stehen in **Abschnitt H**.
 - [ ] **Bundesanzeiger**-Offenlegungsprozess klären (separat zur E-Bilanz)
 - [ ] Rechtliches: DSGVO/AVV, **steuerliche Freigabe** der erzeugten Ausgaben durch Berater
 - [ ] **Echte Testdaten** liefern (reale WJ-Summen-/Saldenliste) für End-to-End-Validierung
+
+---
+
+## I. VOM KUNDEN BEREITZUSTELLEN (Dateneingaben)
+- [ ] **SAP-Exporte der Stammdaten** (Unternehmens-/Steuer-Stammdaten aus SAP)
+- [ ] **Busflotten-Daten (Anlagen)**: je Bus Anschaffungsdatum (purchase date) und
+      angewandte Abschreibung (Methode, Nutzungsdauer, Restwert)
+- [ ] **Kontenrahmen SKR04** (vollständiger Kontenplan)
