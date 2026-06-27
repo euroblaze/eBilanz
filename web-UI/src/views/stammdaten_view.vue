@@ -186,6 +186,7 @@ onMounted(async () => {
     odooForm.protocol = odoo.protocol
     odooApiKeySet.value = odoo.api_key_set
     odooConfigured.value = odoo.configured
+    await ladeWjStammdaten()
     fehler.value = null
   } catch (e) {
     fehler.value = e instanceof ApiError ? e.message : 'Stammdaten konnten nicht geladen werden.'
@@ -193,6 +194,52 @@ onMounted(async () => {
     laden.value = false
   }
 })
+
+function isoDate(d: Date): string {
+  return new Date(d).toISOString().slice(0, 10)
+}
+
+// WJ-Zeitraum aus aktivem WJ + gespeicherte Stammdaten-Werte laden (je WJ).
+async function ladeWjStammdaten() {
+  const p = wj.aktivesProjekt
+  if (p) {
+    werte.wj_von = isoDate(p.von)
+    werte.wj_bis = isoDate(p.bis)
+  }
+  const id = Number(wj.aktivesProjektId)
+  if (!Number.isFinite(id)) return
+  try {
+    const stored = await api.stammdaten(id)
+    for (const [k, v] of Object.entries(stored)) if (v) werte[k] = v
+  } catch {
+    /* noch nichts gespeichert / Backend offline */
+  }
+}
+// Bei WJ-Wechsel neu laden.
+watch(() => wj.aktivesProjektId, ladeWjStammdaten)
+
+// Speichern: manuelle Felder je WJ persistieren (Odoo-Felder bleiben live).
+const speichernMsg = ref<string | null>(null)
+const speichernBusy = ref(false)
+async function speichern() {
+  const id = Number(wj.aktivesProjektId)
+  if (!Number.isFinite(id)) {
+    fehler.value = 'Kein gültiges Wirtschaftsjahr gewählt.'
+    return
+  }
+  speichernBusy.value = true
+  try {
+    const payload: Record<string, string> = {}
+    for (const f of alleFelder) if (f.quelle === 'manuell') payload[f.key] = werte[f.key] ?? ''
+    const res = await api.saveStammdaten(id, payload)
+    speichernMsg.value = `Stammdaten gespeichert (${res.gespeichert} Felder).`
+    setTimeout(() => (speichernMsg.value = null), 2600)
+  } catch (e) {
+    fehler.value = e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.'
+  } finally {
+    speichernBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -201,6 +248,7 @@ onMounted(async () => {
     <Banner v-if="fehler" id="stammdaten-error" kind="error" titel="Stammdaten konnten nicht geladen werden">
       {{ fehler }} — läuft das Backend?
     </Banner>
+    <Banner v-if="speichernMsg" id="stammdaten-saved" kind="info">{{ speichernMsg }}</Banner>
 
     <!-- Banner bei fehlenden Mussfeldern (PRD §3.2) -->
     <Banner
@@ -252,7 +300,9 @@ onMounted(async () => {
     <!-- CTAs (PRD §3.2) -->
     <div id="stammdaten-actions" class="flex flex-wrap justify-end gap-3">
       <TheButton id="stammdaten-odoo" variant="outline" size="lg">Aus Odoo aktualisieren</TheButton>
-      <TheButton id="stammdaten-save" variant="primary" size="lg">Speichern</TheButton>
+      <TheButton id="stammdaten-save" variant="primary" size="lg" :disabled="speichernBusy" @click="speichern">
+        {{ speichernBusy ? 'Speichert…' : 'Speichern' }}
+      </TheButton>
     </div>
 
     <!-- Odoo-Verbindung anlegen / aktualisieren / testen (PRD §4.7) -->

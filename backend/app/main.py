@@ -13,6 +13,7 @@ from app.routers import (
     kontennachweise,
     mapping,
     odoo,
+    stammdaten,
     taxonomie,
     uebermittlung,
     validierung,
@@ -49,3 +50,4 @@ app.include_router(gaap.router)
 app.include_router(kontennachweise.router)
 app.include_router(validierung.router)
 app.include_router(uebermittlung.router)
+app.include_router(stammdaten.router)

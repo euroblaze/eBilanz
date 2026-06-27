@@ -221,6 +221,12 @@ export const api = {
   taxonomien: () => request<TaxonomienDto>('/api/taxonomien'),
   finanzaemter: () => request<FinanzaemterDto>('/api/finanzaemter'),
   company: () => request<CompanyDto>('/api/odoo/company'),
+  stammdaten: (wj: number) => request<Record<string, string>>(`/api/stammdaten/${wj}`),
+  saveStammdaten: (wj: number, werte: Record<string, string>) =>
+    request<{ gespeichert: number }>(`/api/stammdaten/${wj}`, {
+      method: 'PUT',
+      body: JSON.stringify({ werte }),
+    }),
   odooConfig: () => request<OdooConfigDto>('/api/odoo/config'),
   saveOdooConfig: (cfg: OdooConfigInput) =>
     request<OdooConfigDto>('/api/odoo/config', { method: 'PUT', body: JSON.stringify(cfg) }),
