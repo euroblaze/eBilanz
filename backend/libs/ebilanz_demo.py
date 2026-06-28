@@ -323,3 +323,90 @@ def gaap_value_leaves(bestandteil: str) -> list[dict]:
 
     walk(GAAP_TREES.get(bestandteil, []))
     return out
+
+
+# --- Anlagenbuchhaltung (Asset-Register) ------------------------------------
+# Anlageklassen (Reihenfolge = Anlagenspiegel). id -> Position a-<id> im Spiegel.
+ANLAGEN_KLASSEN: list[tuple[str, str]] = [
+    ("immat", "Immaterielle Vermögensgegenstände"),
+    ("grund", "Grundstücke und Bauten"),
+    ("tech", "Technische Anlagen und Werkstattausrüstung"),
+    ("fahrz", "Fahrzeuge / Omnibusse"),
+    ("bga", "Andere Anlagen, Betriebs- und Geschäftsausstattung"),
+    ("aib", "Anlagen im Bau (E-Bus-Ladeinfrastruktur)"),
+]
+KLASSE_LABEL: dict[str, str] = dict(ANLAGEN_KLASSEN)
+
+# Demo-Anlagegueter (OEPNV). Summen je Klasse == Anlagenspiegel-Klassentotale:
+#   immat 95.000/-47.000 · grund 3.800.000/-1.450.000 · tech 980.000/-560.000
+#   fahrz 12.500.000/-5.700.000 · bga 510.000/-330.000 · aib 540.000/0
+# (ahk positiv, kum_abschreibung negativ; Buchwert = ahk + kum_abschreibung).
+ANLAGEN_DEMO: list[dict] = [
+    {"klasse_id": "immat", "bezeichnung": "ERP-/Buchhaltungssoftware (Lizenzen)", "ahk": 95000, "kum_abschreibung": -47000, "jahr": 2021, "nd": 5},
+    {"klasse_id": "grund", "bezeichnung": "Grundstück Betriebshof", "ahk": 1200000, "kum_abschreibung": 0, "jahr": 2005, "nd": None},
+    {"klasse_id": "grund", "bezeichnung": "Werkstatthalle", "ahk": 1800000, "kum_abschreibung": -900000, "jahr": 2009, "nd": 33},
+    {"klasse_id": "grund", "bezeichnung": "Verwaltungsgebäude", "ahk": 800000, "kum_abschreibung": -550000, "jahr": 2004, "nd": 33},
+    {"klasse_id": "tech", "bezeichnung": "Hebebühnen (3 Stk.)", "ahk": 320000, "kum_abschreibung": -200000, "jahr": 2017, "nd": 12},
+    {"klasse_id": "tech", "bezeichnung": "Diagnose- und Werkstattgeräte", "ahk": 380000, "kum_abschreibung": -240000, "jahr": 2018, "nd": 10},
+    {"klasse_id": "tech", "bezeichnung": "Tankanlage und Betriebstechnik", "ahk": 280000, "kum_abschreibung": -120000, "jahr": 2019, "nd": 15},
+    {"klasse_id": "fahrz", "bezeichnung": "Solobusse Diesel (Bj. 2016–2018)", "ahk": 4800000, "kum_abschreibung": -3360000, "jahr": 2017, "nd": 10},
+    {"klasse_id": "fahrz", "bezeichnung": "Gelenkbusse (Bj. 2019–2021)", "ahk": 5200000, "kum_abschreibung": -1820000, "jahr": 2020, "nd": 10},
+    {"klasse_id": "fahrz", "bezeichnung": "E-Busse (Bj. 2023)", "ahk": 2500000, "kum_abschreibung": -520000, "jahr": 2023, "nd": 12},
+    {"klasse_id": "bga", "bezeichnung": "IT-Ausstattung", "ahk": 210000, "kum_abschreibung": -150000, "jahr": 2021, "nd": 5},
+    {"klasse_id": "bga", "bezeichnung": "Büro- und Betriebsausstattung", "ahk": 300000, "kum_abschreibung": -180000, "jahr": 2019, "nd": 10},
+    {"klasse_id": "aib", "bezeichnung": "E-Bus-Ladeinfrastruktur (im Bau)", "ahk": 540000, "kum_abschreibung": 0, "jahr": 2025, "nd": None},
+]
+
+# Demo-Sonderposten (investive Zuschuesse). Summen: Anfang 4.870.000 · Zugang 0 ·
+# Aufloesung -620.000 -> Stand 31.12. 4.250.000 (== Bilanz-Sonderposten).
+SONDERPOSTEN_DEMO: list[dict] = [
+    {"klasse_id": "fahrz", "bezeichnung": "Förderung E-Busse (Bund)", "geber": "Bund", "stand_anfang": 2400000, "zugang": 0, "aufloesung": -300000},
+    {"klasse_id": "aib", "bezeichnung": "Förderung Ladeinfrastruktur (Land)", "geber": "Land", "stand_anfang": 480000, "zugang": 0, "aufloesung": -40000},
+    {"klasse_id": "fahrz", "bezeichnung": "Förderung Gelenkbusse (Aufgabenträger)", "geber": "Aufgabenträger", "stand_anfang": 1990000, "zugang": 0, "aufloesung": -280000},
+]
+
+
+def build_anlagenspiegel_tree(assets: list, sopos: list) -> list[dict]:
+    """Anlagenspiegel-Baum (gleiche Positions-IDs wie GAAP_TREES) aus DB-Zeilen.
+
+    `assets`/`sopos` sind ORM-Objekte oder Dicts mit den Feldern aus den
+    Modellen Anlage / AnlagenSonderposten. Aggregiert AHK + kum. Abschreibung
+    je Klasse (Eltern-Rollup = Buchwert) und die Sonderposten-Entwicklung.
+    """
+    def g(o, k):
+        return o.get(k) if isinstance(o, dict) else getattr(o, k)
+
+    klassen_children = []
+    for kid, label in ANLAGEN_KLASSEN:
+        rows = [a for a in assets if g(a, "klasse_id") == kid]
+        if not rows:
+            continue
+        ahk = sum(g(a, "ahk") for a in rows)
+        abschr = sum(g(a, "kum_abschreibung") for a in rows)
+        klassen_children.append({
+            "id": f"a-{kid}", "label": label, "feldtyp": "Summenmussfeld",
+            "children": [
+                {"id": f"a-{kid}-ahk", "label": "Anschaffungs-/Herstellungskosten", "feldtyp": "Mussfeld", "importwert": ahk},
+                {"id": f"a-{kid}-abschr", "label": "Kumulierte Abschreibungen", "feldtyp": "Mussfeld", "importwert": abschr},
+            ],
+        })
+
+    anfang = sum(g(s, "stand_anfang") for s in sopos)
+    zugang = sum(g(s, "zugang") for s in sopos)
+    aufl = sum(g(s, "aufloesung") for s in sopos)
+
+    return [
+        {
+            "id": "a-av", "label": "Anlagevermögen – Entwicklung (AHK / kum. Abschreibung = Buchwert)",
+            "feldtyp": "Summenmussfeld", "children": klassen_children,
+        },
+        {
+            "id": "a-sopo", "label": "Sonderposten für Investitionszuschüsse – Entwicklung",
+            "feldtyp": "Summenmussfeld",
+            "children": [
+                {"id": "a-sopo-anfang", "label": "Stand 01.01.", "feldtyp": "Mussfeld", "importwert": anfang},
+                {"id": "a-sopo-zugang", "label": "Zugänge (neue Zuschüsse / Fördermittel)", "feldtyp": "Mussfeld", "importwert": zugang},
+                {"id": "a-sopo-aufl", "label": "Auflösung (ertragswirksam)", "feldtyp": "Mussfeld", "importwert": aufl},
+            ],
+        },
+    ]

@@ -27,7 +27,7 @@ const BESTANDTEILE: BestandteilMeta[] = [
   { key: 'ergebnisverwendung', label: 'Ergebnisverwendung', available: true, hinweis: 'Nur Kapitalgesellschaft (GmbH aktiv).' },
   { key: 'steuerlich', label: 'Steuerliche Gewinnermittlung', available: true },
   { key: 'ueberleitung', label: 'Überleitungsrechnung', available: false, hinweis: 'Nur bei Bilanzierungsstandard „Handelsrecht“.' },
-  { key: 'anlagenspiegel', label: 'Anlagenspiegel', available: true, warnung: 'account.asset nicht verfügbar (Odoo Community) — manuelle Erfassung.' },
+  { key: 'anlagenspiegel', label: 'Anlagenspiegel', available: true, hinweis: 'Anlagevermögen live aus der Odoo-Anlagenbuchhaltung (account.asset); Sonderposten manuell.' },
 ]
 
 const aktiv = computed(() => (route.params.bestandteil as string) || 'bilanz')

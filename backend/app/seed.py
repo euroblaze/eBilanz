@@ -6,9 +6,23 @@ from sqlalchemy.orm import Session
 
 from app.config import ROOT_DIR, settings
 from app.database import Base, SessionLocal, engine
-from app.models import GaapValue, OdooConnection, Role, User, Wirtschaftsjahr
+from app.models import (
+    Anlage,
+    AnlagenSonderposten,
+    GaapValue,
+    OdooConnection,
+    Role,
+    User,
+    Wirtschaftsjahr,
+)
 from app.security import hash_password
-from libs.ebilanz_demo import GAAP_BESTANDTEILE, gaap_value_leaves
+from libs.ebilanz_demo import (
+    ANLAGEN_DEMO,
+    GAAP_BESTANDTEILE,
+    KLASSE_LABEL,
+    SONDERPOSTEN_DEMO,
+    gaap_value_leaves,
+)
 
 
 def _ensure_data_dir() -> None:
@@ -27,6 +41,8 @@ def init_db() -> None:
         seed_wirtschaftsjahre(db)
         db.commit()
         seed_gaap_values(db)
+        db.commit()
+        seed_anlagen(db)
         db.commit()
     finally:
         db.close()
@@ -115,3 +131,41 @@ def seed_gaap_values(db: Session) -> None:
                         nil=False,
                     )
                 )
+
+
+def seed_anlagen(db: Session) -> None:
+    """Anlagenbuchhaltung (Asset-Register + Sonderposten) je WJ seeden.
+
+    Fuer alle WJ (der Anlagenspiegel speist sich daraus). Idempotent je WJ:
+    ein WJ wird nur befuellt, wenn es noch keine Anlage hat.
+    """
+    for wj in db.scalars(select(Wirtschaftsjahr)).all():
+        if db.scalar(select(Anlage).where(Anlage.wj_id == wj.id).limit(1)):
+            continue  # WJ bereits befuellt
+        erste_je_klasse: dict[str, int] = {}
+        for a in ANLAGEN_DEMO:
+            row = Anlage(
+                wj_id=wj.id,
+                klasse_id=a["klasse_id"],
+                klasse_label=KLASSE_LABEL[a["klasse_id"]],
+                bezeichnung=a["bezeichnung"],
+                ahk=a["ahk"],
+                kum_abschreibung=a["kum_abschreibung"],
+                anschaffungsjahr=a.get("jahr"),
+                nutzungsdauer_jahre=a.get("nd"),
+            )
+            db.add(row)
+            db.flush()  # row.id fuer Sonderposten-Zuordnung
+            erste_je_klasse.setdefault(a["klasse_id"], row.id)
+        for s in SONDERPOSTEN_DEMO:
+            db.add(
+                AnlagenSonderposten(
+                    wj_id=wj.id,
+                    anlage_id=erste_je_klasse.get(s["klasse_id"]),
+                    bezeichnung=s["bezeichnung"],
+                    geber=s.get("geber", ""),
+                    stand_anfang=s["stand_anfang"],
+                    zugang=s["zugang"],
+                    aufloesung=s["aufloesung"],
+                )
+            )

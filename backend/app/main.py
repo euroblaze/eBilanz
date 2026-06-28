@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import (
+    anlagen,
     auth,
     finanzaemter,
     gaap,
@@ -47,6 +48,7 @@ app.include_router(finanzaemter.router)
 app.include_router(wirtschaftsjahr.router)
 app.include_router(mapping.router)
 app.include_router(gaap.router)
+app.include_router(anlagen.router)
 app.include_router(kontennachweise.router)
 app.include_router(validierung.router)
 app.include_router(uebermittlung.router)

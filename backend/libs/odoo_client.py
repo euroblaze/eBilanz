@@ -211,6 +211,39 @@ class OdooClient:
             )
         return out
 
+    def get_assets(self) -> list[dict]:
+        """Anlagegueter aus der Odoo-Anlagenbuchhaltung (account.asset).
+
+        Liefert je Anlage AHK (original_value), Buchwert (book_value) und die daraus
+        abgeleitete kumulierte Abschreibung (negativ). Vorlagen/Modelle (state='model')
+        werden ausgeschlossen.
+        """
+        fields = [
+            "name", "state", "original_value", "book_value", "value_residual",
+            "salvage_value", "method", "method_number", "method_period",
+            "acquisition_date", "account_asset_id",
+        ]
+        rows = self.execute_kw(
+            "account.asset", "search_read",
+            [[["state", "!=", "model"]]], {"fields": fields, "limit": 1000},
+        )
+        out: list[dict] = []
+        for a in rows:
+            ahk = float(a.get("original_value") or 0.0)
+            buchwert = float(a.get("book_value") or 0.0)
+            acc = a.get("account_asset_id")
+            out.append({
+                "name": a.get("name") or "",
+                "ahk": round(ahk, 2),
+                "buchwert": round(buchwert, 2),
+                "kum_abschreibung": round(buchwert - ahk, 2),  # negativ
+                "acquisition_date": a.get("acquisition_date") or None,
+                "method": a.get("method"),
+                "method_number": a.get("method_number"),
+                "konto": acc[1] if isinstance(acc, list) else "",
+            })
+        return out
+
 
 # Odoo account_type (Selection) -> deutsche Kontoart-Bezeichnung (Anzeige/Filter).
 _ACCOUNT_TYPE_DE = {

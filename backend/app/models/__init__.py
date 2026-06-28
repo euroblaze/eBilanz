@@ -1,4 +1,5 @@
 """Modelle importieren, damit Base.metadata sie kennt (fuer create_all)."""
+from app.models.anlage import Anlage, AnlagenSonderposten
 from app.models.gaap import GaapValue
 from app.models.mapping import MappingEntry
 from app.models.odoo_connection import OdooConnection
@@ -18,4 +19,6 @@ __all__ = [
     "Uebermittlung",
     "SaldoSnapshot",
     "StammdatenWert",
+    "Anlage",
+    "AnlagenSonderposten",
 ]
