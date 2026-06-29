@@ -37,6 +37,8 @@ data/
 *.sqlite
 *.sqlite3
 
-# --- Logs / Temp ---
+# --- Logs / Temp / Laufzeit (run-ebilanz.sh) ---
 *.log
 *.tmp
+logs/
+run/

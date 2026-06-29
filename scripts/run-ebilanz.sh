@@ -1,61 +1,57 @@
 #!/usr/bin/env bash
 #
-# run-ebilanz.sh — pm2 control wrapper RESTRICTED to the eBilanz namespace.
+# run-ebilanz.sh — start/stop the eBilanz app components DIRECTLY (no pm2).
 #
-# It only ever touches pm2 processes in the "ebilanz" namespace; any process in
-# another namespace is invisible to it and cannot be started, stopped, restarted,
-# or deleted through this tool.
+# Each component is launched as a detached background process; its PID is written
+# to run/<name>.pid and its merged stdout+stderr to logs/<name>.log. stop/restart/
+# status/logs all work off those files — a self-contained replacement for pm2.
 #
-# Within eBilanz, processes are grouped into two tiers by name:
-#   frontend = name contains "frontend"
-#   backend  = name contains "backend"
-# restart/reload/stop default to BOTH tiers; use --frontend or --backend to
-# target one. (delete always needs an explicit target — no implicit "both".)
+# Components (see COMPONENTS below):
+#   backend   FastAPI/uvicorn  (backend/.venv/bin/uvicorn app.main:app)  -> :$PORT
+#   frontend  Vue 3 / Vite dev (npm run dev)                             -> :5173
+#
+# HOST/PORT for the backend are read from the repo-root .env (defaults 0.0.0.0:8000).
+# SQLite auto-initialises on backend startup; Odoo is a remote data source (no local
+# process). An ERiC sidecar slots in later as one more COMPONENTS entry.
 #
 # Usage:
-#   scripts/run-ebilanz.sh <action> [options] [-- <app args...>]
+#   scripts/run-ebilanz.sh <action> [target] [options]
 #
 # Actions:
-#   start      Start an eBilanz app (forced into the "ebilanz" namespace)
-#   restart    Restart eBilanz apps (default: frontend + backend)
-#   reload     Zero-downtime reload (default: frontend + backend)
-#   stop       Stop eBilanz apps without removing them (default: both tiers)
-#   delete     Stop and remove an eBilanz app (explicit target required)
-#   status     Show the eBilanz process list (or details for one app)
-#   logs       Tail logs for an eBilanz app (or a snapshot of all)
+#   start      Launch component(s) in the background (skips any already running)
+#   stop       Stop component(s): SIGTERM, then SIGKILL after a grace period
+#   restart    stop + start
+#   status     Show each component: running/stopped/stale + whether its port listens
+#   logs       Tail a component log (default last 40 lines; -f to follow)
+#
+# Targets (default for start/stop/restart/status = both):
+#       --frontend           Frontend only
+#       --backend            Backend only
+#   -a, --all                All components
 #
 # Options:
-#   -n, --name <name>        Target a single app by pm2 name
-#       --frontend           Target the frontend tier only
-#       --backend            Target the backend tier only
-#   -a, --all                Target ALL eBilanz apps (every tier + untiered)
-#   -s, --script <file>      Entry file/command to run        (start only)
-#   -i, --instances <n>      Number of cluster instances, or "max" (start)
-#   -e, --env <name>         Environment to use (e.g. production)
-#   -w, --watch              Restart on file changes          (start only)
-#       --cwd <dir>          Working directory for the app    (start only)
-#       --interpreter <bin>  Interpreter (node, python3, bash...) (start)
-#   -f, --file <ecosystem>   Use a pm2 ecosystem config file  (start only)
-#       --lines <n>          Number of log lines to show      (logs only)
-#   -d, --dry-run            Print the pm2 command, don't run it
+#       --lines <n>          Number of log lines to show        (logs only)
+#   -f, --follow             Follow the log (tail -f)           (logs only)
+#   -d, --dry-run            Print what would run, change nothing
 #   -h, --help               Show this help
 #
-# Anything after `--` is passed straight through to the app being started.
-#
 # Examples:
-#   scripts/run-ebilanz.sh start -n ebilanz-frontend -s dist/web.js -i max -e production
-#   scripts/run-ebilanz.sh start -n ebilanz-backend  -s dist/api.js -i max -e production
-#   scripts/run-ebilanz.sh restart                 # both frontend + backend
-#   scripts/run-ebilanz.sh restart --frontend      # frontend only
-#   scripts/run-ebilanz.sh restart --backend       # backend only
-#   scripts/run-ebilanz.sh stop                    # stop both tiers
-#   scripts/run-ebilanz.sh delete -n ebilanz-backend
+#   scripts/run-ebilanz.sh start                  # backend + frontend
+#   scripts/run-ebilanz.sh start --backend        # backend only
 #   scripts/run-ebilanz.sh status
-#   scripts/run-ebilanz.sh logs -n ebilanz-frontend --lines 100
+#   scripts/run-ebilanz.sh logs --backend --lines 100
+#   scripts/run-ebilanz.sh logs --frontend -f
+#   scripts/run-ebilanz.sh restart --frontend
+#   scripts/run-ebilanz.sh stop
 
 set -euo pipefail
 
-NS="ebilanz"   # the only pm2 namespace this tool will ever operate on
+# --- Resolve repo root from this script's location (works from any CWD) ---------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+RUN_DIR="$ROOT_DIR/run"
+LOG_DIR="$ROOT_DIR/logs"
+mkdir -p "$RUN_DIR" "$LOG_DIR"
 
 die() { echo "Error: $*" >&2; exit 1; }
 
@@ -64,199 +60,215 @@ usage() {
   exit "${1:-0}"
 }
 
-command -v pm2  >/dev/null 2>&1 || die "pm2 is not installed or not on PATH."
-command -v node >/dev/null 2>&1 || die "node is required (to read pm2 state) and not on PATH."
+# --- Read HOST/PORT from .env (fallback to backend/app/config.py defaults) -------
+read_env() {  # read_env KEY DEFAULT
+  local v=""
+  [[ -f "$ROOT_DIR/.env" ]] && v=$(grep -E "^$1=" "$ROOT_DIR/.env" | tail -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | xargs 2>/dev/null || true)
+  echo "${v:-$2}"
+}
+HOST="$(read_env HOST 0.0.0.0)"
+PORT="$(read_env PORT 8000)"
+FE_PORT=5173   # vite dev server (web-UI/vite.config.ts)
 
-# Robust read of pm2's process list as JSON on stdout.
-#
-# `pm2 jlist` can exit non-zero (e.g. while it cold-spawns its daemon) and can
-# even print a "[PM2] Spawning ..." banner to stdout. Neither must be allowed to
-# abort this script (we run under `set -euo pipefail`): the trailing `|| true`
-# swallows the exit code, and the JSON consumers below tolerate banner noise by
-# slicing out the outermost [...] before parsing. Worst case we treat the list
-# as empty rather than crashing.
-_pm2_jlist() { pm2 jlist 2>/dev/null || true; }
+# --- Component registry ----------------------------------------------------------
+# Parallel arrays keyed by component name. To add the ERiC sidecar later, append a
+# name plus its CWD / command / port entry.
+COMPONENTS=(backend frontend)
 
-# Parse the (possibly banner-prefixed) jlist JSON on stdin into a JS array `a`.
-# Shared by the readers below; defaults to [] on any garbage.
-_JLIST_PARSE='
-  const fs=require("fs"); const s=fs.readFileSync(0,"utf8");
-  const i=s.indexOf("["), j=s.lastIndexOf("]"); let a=[];
-  if(i>=0 && j>i){ try{ a=JSON.parse(s.slice(i,j+1)); }catch(e){ a=[]; } }
-'
+comp_cwd() {  case "$1" in
+  backend)  echo "$ROOT_DIR/backend" ;;
+  frontend) echo "$ROOT_DIR/web-UI" ;;
+esac; }
 
-# Names of all pm2 processes currently in the eBilanz namespace.
-_ebilanz_names() {
-  _pm2_jlist | node -e "$_JLIST_PARSE"'
-    const ns=process.argv[1];
-    for (const p of a)
-      if (((p.pm2_env&&p.pm2_env.namespace)||"default")===ns) console.log(p.name);
-  ' "$NS"
+comp_cmd() {  case "$1" in
+  backend)  echo ".venv/bin/uvicorn app.main:app --host $HOST --port $PORT" ;;
+  frontend) echo "npm run dev" ;;
+esac; }
+
+comp_port() { case "$1" in
+  backend)  echo "$PORT" ;;
+  frontend) echo "$FE_PORT" ;;
+esac; }
+
+pidfile() { echo "$RUN_DIR/$1.pid"; }
+logfile() { echo "$LOG_DIR/$1.log"; }
+
+# --- Process-state helpers -------------------------------------------------------
+
+# is_running NAME -> 0 if a live process is tracked, else 1. Echoes the PID on success.
+is_running() {
+  local pf; pf=$(pidfile "$1"); [[ -f "$pf" ]] || return 1
+  local pid; pid=$(cat "$pf" 2>/dev/null || true)
+  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && { echo "$pid"; return 0; }
+  return 1
 }
 
-# eBilanz process names filtered by tier: frontend | backend | both.
-_ebilanz_tier() {
-  local tier=$1 n
-  while IFS= read -r n; do
-    case "$tier" in
-      frontend) [[ "$n" == *frontend* ]] && echo "$n" ;;
-      backend)  [[ "$n" == *backend*  ]] && echo "$n" ;;
-      both)     [[ "$n" == *frontend* || "$n" == *backend* ]] && echo "$n" ;;
-    esac
-  done < <(_ebilanz_names)
+# port_listening PORT -> 0 if something is bound to it.
+port_listening() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | grep -q ":$1[[:space:]]"
+  else
+    (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1
+  fi
 }
 
-# Compact status table for eBilanz processes only.
-_ebilanz_status() {
-  _pm2_jlist | node -e "$_JLIST_PARSE"'
-    const ns=process.argv[1];
-    const rows=a.filter(p=>((p.pm2_env&&p.pm2_env.namespace)||"default")===ns);
-    if(!rows.length){
-      console.log("No eBilanz processes (pm2 namespace \x27"+ns+"\x27).");
-    } else {
-      console.log(["id","name","status","restarts","cpu","mem"].join("\t"));
-      for(const p of rows){
-        const e=p.pm2_env||{}, m=p.monit||{};
-        console.log([p.pm_id, p.name, e.status||"?", e.restart_time||0,
-          (m.cpu||0)+"%", Math.round((m.memory||0)/1048576)+"mb"].join("\t"));
-      }
-    }
-  ' "$NS"
+# Pre-flight per component; dies with an actionable hint.
+preflight() {
+  case "$1" in
+    backend)
+      [[ -x "$ROOT_DIR/backend/.venv/bin/uvicorn" ]] || \
+        die "backend venv missing. Create it: cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+      ;;
+    frontend)
+      command -v npm >/dev/null 2>&1 || die "npm not on PATH (needed for the frontend)."
+      command -v node >/dev/null 2>&1 || die "node not on PATH (needed for the frontend)."
+      if [[ ! -d "$ROOT_DIR/web-UI/node_modules" ]]; then
+        if [[ -n "$DRY_RUN" ]]; then
+          echo "DRY-RUN: (cd web-UI && npm install)"
+        else
+          echo "frontend: node_modules missing -> running npm install ..."
+          ( cd "$ROOT_DIR/web-UI" && npm install )
+        fi
+      fi
+      ;;
+  esac
 }
 
-require_ebilanz() {
-  local target=$1 n
-  while IFS= read -r n; do
-    [[ "$n" == "$target" ]] && return 0
-  done < <(_ebilanz_names)
-  die "Refusing: '$target' is not an eBilanz process (pm2 namespace '$NS')."
+# --- Actions per component -------------------------------------------------------
+
+start_one() {
+  local name=$1 cwd cmd pf log pid
+  cwd=$(comp_cwd "$name"); cmd=$(comp_cmd "$name"); pf=$(pidfile "$name"); log=$(logfile "$name")
+  if pid=$(is_running "$name"); then
+    echo "$name: already running (pid $pid) — skipping."
+    return 0
+  fi
+  preflight "$name"
+  if [[ -n "$DRY_RUN" ]]; then
+    echo "DRY-RUN: (cd $cwd && setsid $cmd >$log 2>&1 </dev/null &)  # pid -> $pf"
+    return 0
+  fi
+  # setsid puts the command in its own session/process group so stop_one can kill
+  # the whole group (e.g. npm AND its child vite). setsid may fork, so $! would be
+  # the transient wrapper, not the daemon — instead the session leader records its
+  # OWN $$ (which exec preserves) into the pidfile; that pid == the process-group id.
+  rm -f "$pf"
+  ( cd "$cwd" && setsid bash -c "echo \$\$ > '$pf'; exec $cmd" >"$log" 2>&1 </dev/null & )
+  for _ in $(seq 1 20); do [[ -s "$pf" ]] && break; sleep 0.1; done
+  if pid=$(is_running "$name"); then
+    echo "$name: started (pid $pid) -> http://${HOST/0.0.0.0/10.0.99.1}:$(comp_port "$name")  | log: $log"
+  else
+    echo "$name: FAILED to start — see $log" >&2
+    tail -n 15 "$log" >&2 2>/dev/null || true
+    return 1
+  fi
 }
 
+stop_one() {
+  local name=$1 pf pid i
+  pf=$(pidfile "$name")
+  if ! pid=$(is_running "$name"); then
+    [[ -f "$pf" ]] && { rm -f "$pf"; echo "$name: not running (cleared stale pidfile)."; } \
+                   || echo "$name: not running."
+    return 0
+  fi
+  if [[ -n "$DRY_RUN" ]]; then
+    echo "DRY-RUN: kill -TERM -$pid  # whole process group of $name"
+    return 0
+  fi
+  # Negative PID -> signal the entire process group (leader + children like vite).
+  kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+  for i in $(seq 1 20); do            # up to ~10s grace
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "$name: did not exit — sending SIGKILL."
+    kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+  fi
+  rm -f "$pf"
+  echo "$name: stopped (was pid $pid)."
+}
+
+status_one() {
+  local name=$1 pid state port pstate
+  port=$(comp_port "$name")
+  if pid=$(is_running "$name"); then
+    state="running (pid $pid)"
+  elif [[ -f "$(pidfile "$name")" ]]; then
+    state="STOPPED (stale pidfile)"
+  else
+    state="stopped"
+  fi
+  port_listening "$port" && pstate="listening" || pstate="-"
+  printf '%-10s %-26s port %-6s %s\n' "$name" "$state" "$port" "$pstate"
+}
+
+tail_one() {
+  local name=$1 log; log=$(logfile "$name")
+  [[ -f "$log" ]] || die "no log for '$name' yet ($log)."
+  if [[ -n "$FOLLOW" ]]; then
+    echo "===== following $log (Ctrl-C to stop) ====="
+    tail -n "${LINES:-40}" -f "$log"
+  else
+    echo "===== $log (last ${LINES:-40}) ====="
+    tail -n "${LINES:-40}" "$log"
+  fi
+}
+
+# --- Arg parsing -----------------------------------------------------------------
 [[ $# -ge 1 ]] || usage 1
 action=$1; shift
 
-# Defaults
-name="" script="" instances="" env_name="" watch="" cwd="" interpreter=""
-eco_file="" all="" fe="" be="" lines="" dry_run="" app_args=()
-
+FE="" BE="" ALL="" LINES="" FOLLOW="" DRY_RUN=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -n|--name)        name=${2:?missing value for $1}; shift 2 ;;
-    --frontend)       fe=1; shift ;;
-    --backend)        be=1; shift ;;
-    -a|--all)         all=1; shift ;;
-    -s|--script)      script=${2:?missing value for $1}; shift 2 ;;
-    -i|--instances)   instances=${2:?missing value for $1}; shift 2 ;;
-    -e|--env)         env_name=${2:?missing value for $1}; shift 2 ;;
-    -w|--watch)       watch=1; shift ;;
-    --cwd)            cwd=${2:?missing value for $1}; shift 2 ;;
-    --interpreter)    interpreter=${2:?missing value for $1}; shift 2 ;;
-    -f|--file)        eco_file=${2:?missing value for $1}; shift 2 ;;
-    --lines)          lines=${2:?missing value for $1}; shift 2 ;;
-    -d|--dry-run)     dry_run=1; shift ;;
-    -h|--help)        usage 0 ;;
-    --)               shift; app_args=("$@"); break ;;
-    -*)               die "Unknown option: $1 (try --help)" ;;
-    *)                die "Unexpected argument: $1 (try --help)" ;;
+    --frontend)   FE=1; shift ;;
+    --backend)    BE=1; shift ;;
+    -a|--all)     ALL=1; shift ;;
+    --lines)      LINES=${2:?missing value for $1}; shift 2 ;;
+    -f|--follow)  FOLLOW=1; shift ;;
+    -d|--dry-run) DRY_RUN=1; shift ;;
+    -h|--help)    usage 0 ;;
+    -*)           die "Unknown option: $1 (try --help)" ;;
+    *)            die "Unexpected argument: $1 (try --help)" ;;
   esac
 done
 
-run() {
-  if [[ -n "$dry_run" ]]; then
-    printf 'DRY-RUN: '; printf '%q ' pm2 "$@"; echo
-  else
-    pm2 "$@"
-  fi
-}
-
-# Resolve the tier implied by --frontend/--backend (empty if none given).
-selected_tier() {
-  if   [[ -n "$fe" && -z "$be" ]]; then echo frontend
-  elif [[ -n "$be" && -z "$fe" ]]; then echo backend
-  elif [[ -n "$fe" && -n "$be" ]]; then echo both
-  else echo ""
-  fi
-}
+# Resolve the target component list (default: all).
+targets=()
+if   [[ -n "$ALL" ]]; then targets=("${COMPONENTS[@]}")
+elif [[ -n "$FE" && -n "$BE" ]]; then targets=(backend frontend)
+elif [[ -n "$FE" ]]; then targets=(frontend)
+elif [[ -n "$BE" ]]; then targets=(backend)
+else targets=("${COMPONENTS[@]}")
+fi
 
 case "$action" in
   start)
-    cmd=(start)
-    if [[ -n "$eco_file" ]]; then
-      cmd+=("$eco_file")
-    else
-      [[ -n "$script" ]] || die "start needs --script <file> (or --file <ecosystem>)"
-      cmd+=("$script")
-      [[ -n "$name" ]] && cmd+=(--name "$name")
-    fi
-    cmd+=(--namespace "$NS")          # force every start into the eBilanz namespace
-    [[ -n "$instances" ]]   && cmd+=(-i "$instances")
-    [[ -n "$env_name" ]]    && cmd+=(--env "$env_name")
-    [[ -n "$watch" ]]       && cmd+=(--watch)
-    [[ -n "$cwd" ]]         && cmd+=(--cwd "$cwd")
-    [[ -n "$interpreter" ]] && cmd+=(--interpreter "$interpreter")
-    [[ ${#app_args[@]} -gt 0 ]] && cmd+=(-- "${app_args[@]}")
-    run "${cmd[@]}"
+    for c in "${targets[@]}"; do start_one "$c"; done
     ;;
-
-  restart|reload|stop|delete)
-    [[ -n "$eco_file" ]] && die "$action: --file is only for 'start'"
-    cmd=("$action")
-    if [[ -n "$name" ]]; then
-      require_ebilanz "$name"
-      cmd+=("$name")
-    elif [[ -n "$all" ]]; then
-      mapfile -t apps < <(_ebilanz_names)
-      [[ ${#apps[@]} -gt 0 ]] || die "No eBilanz processes found (pm2 namespace '$NS')."
-      cmd+=("${apps[@]}")
-    else
-      tier=$(selected_tier)
-      if [[ -z "$tier" ]]; then
-        # No explicit target. restart/reload/stop default to BOTH; delete must be explicit.
-        [[ "$action" == delete ]] && \
-          die "delete needs an explicit target: --name, --frontend, --backend, or --all"
-        tier=both
-      fi
-      mapfile -t apps < <(_ebilanz_tier "$tier")
-      if [[ ${#apps[@]} -eq 0 ]]; then
-        avail=$(_ebilanz_names | paste -sd', ' -)
-        die "No eBilanz '$tier' process found. Known eBilanz processes: ${avail:-<none>}"
-      fi
-      cmd+=("${apps[@]}")
-    fi
-    [[ -n "$env_name" ]] && cmd+=(--env "$env_name")
-    run "${cmd[@]}"
+  stop)
+    for c in "${targets[@]}"; do stop_one "$c"; done
     ;;
-
+  restart)
+    for c in "${targets[@]}"; do stop_one "$c"; done
+    for c in "${targets[@]}"; do start_one "$c"; done
+    ;;
   status|list|ls)
-    if [[ -n "$name" ]]; then
-      require_ebilanz "$name"
-      run describe "$name"
-    else
-      _ebilanz_status
-    fi
+    for c in "${targets[@]}"; do status_one "$c"; done
     ;;
-
   logs)
-    if [[ -n "$name" ]]; then
-      require_ebilanz "$name"
-      cmd=(logs "$name"); [[ -n "$lines" ]] && cmd+=(--lines "$lines")
-      run "${cmd[@]}"
-    elif [[ -n "$all" ]]; then
-      mapfile -t apps < <(_ebilanz_names)
-      [[ ${#apps[@]} -gt 0 ]] || die "No eBilanz processes found (pm2 namespace '$NS')."
-      for a in "${apps[@]}"; do
-        echo "===== logs: $a ====="
-        run logs "$a" --nostream --lines "${lines:-20}"
-      done
-    else
-      die "logs needs --name <app> or --all"
+    # logs targets a single component; default backend if none given.
+    if [[ ${#targets[@]} -ne 1 ]]; then
+      [[ -n "$FE" || -n "$BE" ]] || targets=(backend)
+      [[ ${#targets[@]} -eq 1 ]] || die "logs needs exactly one target: --frontend or --backend"
     fi
+    tail_one "${targets[0]}"
     ;;
-
   -h|--help|help)
     usage 0
     ;;
-
   *)
     die "Unknown action: $action (try --help)"
     ;;
